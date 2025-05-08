@@ -1,14 +1,17 @@
 import AuthButton from "../components/AuthButton";
 import { createClient } from "@/utils/supabase/server";
-
 import { revalidatePath } from "next/cache";
 import Form from "@/components/Form";
+import { Todo } from "@/types/todo";
+import TodoItem from "@/components/TodoItem";
+import { addTodo } from "./actions";
 
-async function getData() {
+async function getTodos() {
   const supabase = createClient();
   const { data } = await supabase
-    .from("list")
-    .select("title, content, created_at, id");
+    .from("todos")
+    .select("*")
+    .order("created_at", { ascending: false });
 
   return data ?? [];
 }
@@ -19,7 +22,7 @@ export default async function Index() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const data = await getData();
+  const todos = await getTodos();
 
   const canInitSupabaseClient = () => {
     try {
@@ -32,27 +35,6 @@ export default async function Index() {
 
   const isSupabaseConnected = canInitSupabaseClient();
 
-  const handleSubmit = async (formData: FormData) => {
-    "use server";
-
-    const supabase = createClient();
-    const data = {
-      title: formData.get("title"),
-      content: formData.get("title"),
-    };
-
-    if (!data.content || !data.title) {
-      return false;
-    }
-    const res = await supabase.from("list").insert(data);
-    if (res.error) {
-      console.log(`[${res.status}] ${res.error.code} ${res.error.message}`);
-      return false;
-    }
-    revalidatePath("/");
-    return true;
-  };
-
   return (
     <div className="flex-1 w-full flex flex-col gap-20 items-center">
       <nav className="w-full flex justify-center border-b border-b-foreground/10 h-16">
@@ -64,21 +46,19 @@ export default async function Index() {
       {!!user ? (
         <div className="animate-in flex-1 flex flex-col gap-20 opacity-0 max-w-4xl px-3">
           <main className="flex-1 flex flex-col gap-6">
-            <Form onSubmit={handleSubmit} />
-            <div>
-              {data.map((item) => (
-                <div key={item.id}>{item.title}</div>
+            <h1 className="text-3xl font-bold">Todo 앱</h1>
+            <Form onSubmit={addTodo} />
+            <div className="flex flex-col gap-4">
+              {todos.map((todo: Todo) => (
+                <TodoItem key={todo.id} todo={todo} />
               ))}
             </div>
           </main>
         </div>
       ) : (
-        <div>
-          <p className="text-3xl">Welcome to the JCOD world</p>
-          <div className="flex flex-col gap-1 items-center pt-10">
-            <p>If you want to do something in the world</p>
-            <p>Let's login to the world</p>
-          </div>
+        <div className="flex flex-col items-center gap-4">
+          <h1 className="text-3xl font-bold">Todo 앱</h1>
+          <p>로그인하여 Todo 앱을 사용해보세요.</p>
         </div>
       )}
     </div>
