@@ -18,20 +18,24 @@ import {
   checkAttendance,
   getAttendanceHistory,
   getRewards,
-} from "@/lib/attendance-service";
+} from "@/services/attendanceService";
 import { useToast } from "@/hooks/use-toast";
 import Link from "next/link";
 import confetti from "canvas-confetti";
 import AuthButton from "../AuthButton";
+import { useUser } from "../UserProvider";
 
 export default function Home() {
   const [streak, setStreak] = useState(0);
+  const [longestStreak, setLongestStreak] = useState(0);
   const [todayChecked, setTodayChecked] = useState(false);
   const [points, setPoints] = useState(0);
   const [nextReward, setNextReward] = useState(7);
   const [progress, setProgress] = useState(0);
   const [showAnimation, setShowAnimation] = useState(false);
+  const [loading, setLoading] = useState(false);
   const { toast } = useToast();
+  const { user } = useUser();
 
   const messages = [
     "오늘도 출석 완료! 내일도 잊지 마세요.",
@@ -42,218 +46,240 @@ export default function Home() {
   ];
 
   useEffect(() => {
-    // 로컬 스토리지에서 데이터 로드
-    const loadData = async () => {
+    // 데이터 로드
+    loadData();
+  }, [user]);
+
+  // Supabase에서 데이터 로드
+  const loadData = async () => {
+    if (!user) return;
+    
+    try {
+      // 출석 기록 및 통계 가져오기
       const history = await getAttendanceHistory();
-      const { streak: currentStreak, points: currentPoints } =
+      const { streak: currentStreak, points: currentPoints, longestStreak: maxStreak } =
         await getRewards();
 
       setStreak(currentStreak);
       setPoints(currentPoints);
+      setLongestStreak(maxStreak);
 
       // 오늘 이미 출석했는지 확인
-      const today = new Date().toDateString();
-      const checked = history.some(
-        (date) => new Date(date).toDateString() === today
-      );
+      const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD 형식
+      const checked = history.some(date => date === today);
       setTodayChecked(checked);
 
       // 다음 보상까지 남은 일수 계산
-      const daysUntilNextReward = 7 - (currentStreak % 7);
-      setNextReward(daysUntilNextReward);
+      calculateNextReward(currentStreak);
+    } catch (error) {
+      console.error("데이터 로드 오류:", error);
+    }
+  };
 
+  // 다음 보상까지 남은 일수 및 진행률 계산
+  const calculateNextReward = (currentStreak: number) => {
+    // 다음 보상 계산 (3일, 7일, 30일 주기)
+    let daysUntilNextReward = 0;
+    let progressValue = 0;
+    
+    if (currentStreak % 30 === 0) {
+      // 30일 보상을 받은 직후
+      daysUntilNextReward = 3;
+      progressValue = 0;
+    } else if (currentStreak % 7 === 0) {
+      // 7일 보상을 받은 직후
+      daysUntilNextReward = 3;
+      progressValue = 0;
+    } else if (currentStreak % 3 === 0) {
+      // 3일 보상을 받은 직후
+      daysUntilNextReward = 4; // 다음 7일 보상까지
+      progressValue = 0;
+    } else {
+      // 가장 가까운 보상 계산
+      const daysUntil3 = 3 - (currentStreak % 3);
+      const daysUntil7 = 7 - (currentStreak % 7);
+      const daysUntil30 = 30 - (currentStreak % 30);
+      
+      daysUntilNextReward = Math.min(daysUntil3, daysUntil7, daysUntil30);
+      
       // 진행률 계산
-      const progressValue = ((7 - daysUntilNextReward) / 7) * 100;
-      setProgress(progressValue);
-    };
+      if (daysUntilNextReward === daysUntil3) {
+        progressValue = ((3 - daysUntilNextReward) / 3) * 100;
+      } else if (daysUntilNextReward === daysUntil7) {
+        progressValue = ((7 - daysUntilNextReward) / 7) * 100;
+      } else {
+        progressValue = ((30 - daysUntilNextReward) / 30) * 100;
+      }
+    }
+    
+    setNextReward(daysUntilNextReward);
+    setProgress(progressValue);
+  };
 
-    loadData();
-  }, []);
-
+  // 출석체크 처리
   const handleAttendance = async () => {
-    if (todayChecked) {
+    if (!user) {
       toast({
-        title: "이미 오늘 출석했습니다!",
-        description: "내일 다시 방문해주세요.",
-        variant: "default",
+        title: "로그인 필요",
+        description: "출석체크를 위해 로그인해주세요.",
+        variant: "error",
       });
       return;
     }
-
-    const { newStreak, newPoints, specialReward } = await checkAttendance();
-
-    // 출석체크 성공 애니메이션
-    setShowAnimation(true);
-
-    // 컨페티 효과
-    confetti({
-      particleCount: 100,
-      spread: 70,
-      origin: { y: 0.6 },
-    });
-
-    // 상태 업데이트
-    setTodayChecked(true);
-    setStreak(newStreak);
-    setPoints(newPoints);
-
-    // 다음 보상까지 남은 일수 계산
-    const daysUntilNextReward = 7 - (newStreak % 7);
-    setNextReward(daysUntilNextReward);
-
-    // 진행률 계산
-    const progressValue = ((7 - daysUntilNextReward) / 7) * 100;
-    setProgress(progressValue);
-
-    // 특별 보상 메시지
-    if (specialReward) {
+    
+    if (todayChecked) {
       toast({
-        title: "🎉 특별 보상 획득!",
-        description: `${newStreak}일 연속 출석 달성! ${specialReward} 포인트가 추가 지급되었습니다.`,
-        variant: "default",
+        title: "이미 출석했습니다",
+        description: "오늘은 이미 출석체크를 완료했습니다.",
+        variant: "info",
       });
-    } else {
-      // 일반 출석 메시지
-      const randomMessage =
-        messages[Math.floor(Math.random() * messages.length)];
-      toast({
-        title: "출석 완료!",
-        description: randomMessage,
-        variant: "default",
-      });
+      return;
     }
-
-    // 애니메이션 종료
-    setTimeout(() => {
-      setShowAnimation(false);
-    }, 2000);
+    
+    setLoading(true);
+    
+    try {
+      const { newStreak, newPoints, specialReward, success, message } = await checkAttendance();
+      
+      if (success) {
+        // 애니메이션 표시
+        setShowAnimation(true);
+        
+        // 랜덤 메시지 선택
+        const randomMessage = messages[Math.floor(Math.random() * messages.length)];
+        
+        // 특별 보상이 있는 경우 메시지 추가
+        const rewardMessage = specialReward 
+          ? `축하합니다! ${specialReward} 포인트 추가 보상을 받았습니다.` 
+          : randomMessage;
+        
+        // 폭죽 효과
+        confetti({
+          particleCount: 100,
+          spread: 70,
+          origin: { y: 0.6 }
+        });
+        
+        toast({
+          title: "출석체크 완료!",
+          description: rewardMessage,
+          variant: "success",
+        });
+        
+        // 상태 업데이트
+        setStreak(newStreak);
+        setPoints(newPoints);
+        setTodayChecked(true);
+        
+        // 다음 보상 계산
+        calculateNextReward(newStreak);
+        
+        // 최장 스트릭 업데이트
+        if (newStreak > longestStreak) {
+          setLongestStreak(newStreak);
+        }
+        
+        // 3초 후 애니메이션 숨기기
+        setTimeout(() => {
+          setShowAnimation(false);
+        }, 3000);
+      } else {
+        toast({
+          title: "출석체크 실패",
+          description: message || "출석체크 중 오류가 발생했습니다.",
+          variant: "error",
+        });
+      }
+    } catch (error) {
+      console.error("출석체크 오류:", error);
+      toast({
+        title: "출석체크 실패",
+        description: "출석체크 중 오류가 발생했습니다.",
+        variant: "error",
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <main className="flex w-full flex-1 flex-col items-center justify-center p-4 bg-gradient-to-b from-background to-muted">
+    <main className="flex-1 flex flex-col items-center justify-center p-4 relative">
+      <div className="absolute top-4 right-4">
+        <AuthButton />
+      </div>
+      
       <Card className="w-full max-w-md mx-auto shadow-lg relative overflow-hidden">
-        {/* 배경 장식 */}
-        <div className="absolute -top-10 -right-10 w-40 h-40 bg-primary/10 rounded-full blur-xl" />
-        <div className="absolute -bottom-10 -left-10 w-40 h-40 bg-primary/10 rounded-full blur-xl" />
-
-        <CardHeader className="text-center relative z-10">
-          <div className="flex justify-end">
-            <AuthButton />
-          </div>
-          <CardTitle className="text-2xl font-bold">데일리 출석체크</CardTitle>
-          <CardDescription>매일 출석하고 보상을 받으세요!</CardDescription>
+        <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-background to-secondary/10 z-0" />
+        
+        <CardHeader className="relative z-10">
+          <CardTitle className="text-2xl font-bold text-center">
+            오늘의 출석체크
+          </CardTitle>
+          <CardDescription className="text-center">
+            매일 출석하고 포인트를 모아보세요!
+          </CardDescription>
         </CardHeader>
-
-        <CardContent className="flex flex-col items-center gap-6 relative z-10">
-          {/* 포인트 및 스트릭 표시 */}
-          <div className="flex justify-between w-full">
-            <Badge
-              variant="outline"
-              className="flex items-center gap-1 px-3 py-1 text-sm"
-            >
-              <Star className="h-4 w-4 text-yellow-500" />
-              <span>{points} 포인트</span>
-            </Badge>
-            <Badge
-              variant="outline"
-              className="flex items-center gap-1 px-3 py-1 text-sm"
-            >
-              <Trophy className="h-4 w-4 text-orange-500" />
-              <span>{streak}일 연속 출석</span>
+        
+        <CardContent className="space-y-6 relative z-10">
+          {/* 스트릭 및 포인트 정보 */}
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-1">
+              <Trophy className="h-4 w-4 text-amber-500" />
+              <span className="text-sm font-medium">
+                {streak}일 연속 출석
+              </span>
+            </div>
+            <div className="flex items-center gap-1">
+              <Star className="h-4 w-4 text-amber-500" />
+              <span className="text-sm font-medium">{points} 포인트</span>
+            </div>
+          </div>
+          
+          {/* 최장 스트릭 */}
+          <div className="flex justify-center items-center">
+            <Badge variant="outline" className="flex items-center gap-1">
+              <Trophy className="h-3 w-3 text-amber-500" />
+              <span className="text-xs">최장 기록: {longestStreak}일</span>
             </Badge>
           </div>
-
-          {/* 다음 보상까지 진행 상황 */}
-          <div className="w-full space-y-2">
-            <div className="flex justify-between text-sm">
+          
+          {/* 다음 보상까지 진행률 */}
+          <div className="space-y-2">
+            <div className="flex justify-between text-xs">
               <span>다음 보상까지</span>
-              <span className="font-medium">{nextReward}일 남음</span>
+              <span>{nextReward}일 남음</span>
             </div>
             <Progress value={progress} className="h-2" />
-            <div className="flex justify-between text-xs text-muted-foreground">
-              <span>오늘</span>
-              <span>7일 보상</span>
-            </div>
           </div>
-
-          {/* 메인 출석체크 버튼 - 원형 버튼으로 변경 */}
-          <div className="w-full flex justify-center items-center py-6 relative">
-            {/* 배경 효과 - 원형 그라데이션 */}
-            <div className="absolute inset-0 flex justify-center items-center">
-              <div className="w-48 h-48 bg-gradient-to-r from-primary/20 via-primary/10 to-primary/20 rounded-full blur-md" />
-            </div>
-
-            {/* 빛나는 효과 애니메이션 */}
-            {!todayChecked && (
-              <>
-                <motion.div
-                  className="absolute w-52 h-52 rounded-full bg-primary/5"
-                  animate={{ scale: [1, 1.05, 1], opacity: [0.7, 0.4, 0.7] }}
-                  transition={{
-                    duration: 2,
-                    repeat: Number.POSITIVE_INFINITY,
-                    ease: "easeInOut",
-                  }}
-                />
-                <motion.div
-                  className="absolute w-56 h-56 rounded-full bg-primary/5"
-                  animate={{ scale: [1, 1.1, 1], opacity: [0.5, 0.2, 0.5] }}
-                  transition={{
-                    duration: 3,
-                    repeat: Number.POSITIVE_INFINITY,
-                    ease: "easeInOut",
-                    delay: 0.3,
-                  }}
-                />
-              </>
-            )}
-
-            <motion.button
-              onClick={handleAttendance}
-              disabled={todayChecked}
-              className={`w-44 h-44 rounded-full flex flex-col items-center justify-center text-white font-bold relative z-10 shadow-lg ${
-                todayChecked
-                  ? "bg-green-500 cursor-default"
-                  : "bg-gradient-to-br from-primary to-purple-700 hover:from-primary/90 hover:to-purple-600 cursor-pointer"
-              }`}
-              whileHover={!todayChecked ? { scale: 1.05 } : {}}
-              whileTap={!todayChecked ? { scale: 0.95 } : {}}
-              animate={
-                !todayChecked
-                  ? {
-                      boxShadow: [
-                        "0 0 0 0 rgba(124, 58, 237, 0)",
-                        "0 0 0 15px rgba(124, 58, 237, 0.2)",
-                        "0 0 0 0 rgba(124, 58, 237, 0)",
-                      ],
-                    }
-                  : {}
-              }
-              transition={
-                !todayChecked
-                  ? {
-                      duration: 2,
-                      repeat: Number.POSITIVE_INFINITY,
-                      repeatType: "loop",
-                    }
-                  : {}
-              }
+          
+          {/* 출석체크 버튼 */}
+          <div className="flex justify-center py-4 relative">
+            <motion.div
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              className="relative"
             >
-              {todayChecked ? (
-                <>
-                  <Check className="h-10 w-10 mb-2" />
-                  <span className="text-lg">출석 완료!</span>
-                </>
-              ) : (
-                <>
-                  <Sparkles className="h-10 w-10 mb-2" />
-                  <span className="text-lg">출석체크</span>
-                  <span className="text-sm mt-1">터치하세요</span>
-                </>
-              )}
-            </motion.button>
-
-            {/* 출석체크 성공 애니메이션 */}
+              <Button
+                onClick={handleAttendance}
+                disabled={todayChecked || loading}
+                className={`rounded-full w-24 h-24 flex flex-col items-center justify-center ${
+                  todayChecked ? "bg-green-500 hover:bg-green-500" : ""
+                }`}
+              >
+                {todayChecked ? (
+                  <>
+                    <Check className="h-8 w-8 mb-1" />
+                    <span className="text-xs">완료</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="h-8 w-8 mb-1" />
+                    <span className="text-xs">{loading ? "처리 중..." : "출석하기"}</span>
+                  </>
+                )}
+              </Button>
+            </motion.div>
+            
             {showAnimation && (
               <motion.div
                 initial={{ scale: 0.8, opacity: 0 }}
@@ -267,6 +293,7 @@ export default function Home() {
               </motion.div>
             )}
           </div>
+          
           {/* 보상 안내 */}
           <div className="grid grid-cols-3 gap-2 w-full">
             <Card className="bg-muted/50">
