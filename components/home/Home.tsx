@@ -1,5 +1,3 @@
-"use client";
-
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,15 +13,15 @@ import { Progress } from "@/components/ui/progress";
 import { Check, Gift, Calendar, Trophy, Sparkles, Star } from "lucide-react";
 import { motion } from "framer-motion";
 import {
+  getUserAttendanceData,
   checkAttendance,
-  getAttendanceHistory,
-  getRewards,
 } from "@/services/attendanceService";
 import { useToast } from "@/hooks/use-toast";
 import Link from "next/link";
 import confetti from "canvas-confetti";
 import AuthButton from "../AuthButton";
 import { useUser } from "../UserProvider";
+import { User } from "@supabase/supabase-js";
 
 export default function Home() {
   const [streak, setStreak] = useState(0);
@@ -34,6 +32,7 @@ export default function Home() {
   const [progress, setProgress] = useState(0);
   const [showAnimation, setShowAnimation] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [isDataLoaded, setIsDataLoaded] = useState(false); // 데이터 로드 상태 플래그
   const { toast } = useToast();
   const { user } = useUser();
 
@@ -47,32 +46,62 @@ export default function Home() {
 
   useEffect(() => {
     // 데이터 로드
-    loadData();
-  }, [user]);
+    if (user && !isDataLoaded && !loading) {
+      console.log("=== call loadData ===", new Date());
+      loadData(user);
+    } else if (!user) {
+      // 사용자가 로그아웃했거나 아직 없는 경우, 로드 상태 초기화
+      setIsDataLoaded(false);
+      setLoading(false);
+      // 관련 상태들도 초기화 (선택 사항)
+      setStreak(0);
+      setPoints(0);
+      setLongestStreak(0);
+      setTodayChecked(false);
+      setNextReward(0);
+      setProgress(0);
+    }
+  }, [user, isDataLoaded, loading]);
 
   // Supabase에서 데이터 로드
-  const loadData = async () => {
-    if (!user) return;
-    
+  const loadData = async (currentUser: User) => {
+    if (!currentUser) return;
+
+    setLoading(true);
     try {
-      // 출석 기록 및 통계 가져오기
-      const history = await getAttendanceHistory();
-      const { streak: currentStreak, points: currentPoints, longestStreak: maxStreak } =
-        await getRewards();
+      // 출석 기록 및 통계 가져오기 (단일 호출로 변경)
+      const userAttendance = await getUserAttendanceData(currentUser);
+
+      // userAttendance.userStats가 null일 수 있음 (예: 신규 사용자)
+      const currentStreak = userAttendance.userStats?.current_streak ?? 0;
+      const currentPoints = userAttendance.userStats?.total_points ?? 0;
+      const maxStreak = userAttendance.userStats?.longest_streak ?? 0;
+      const history = userAttendance.attendanceHistory ?? [];
 
       setStreak(currentStreak);
       setPoints(currentPoints);
       setLongestStreak(maxStreak);
 
       // 오늘 이미 출석했는지 확인
-      const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD 형식
-      const checked = history.some(date => date === today);
+      const today = new Date().toISOString().split("T")[0];
+      const checked = history.some((date: string) => date === today);
       setTodayChecked(checked);
 
       // 다음 보상까지 남은 일수 계산
       calculateNextReward(currentStreak);
+      setIsDataLoaded(true);
     } catch (error) {
       console.error("데이터 로드 오류:", error);
+      toast({
+        title: "데이터 로드 실패",
+        description:
+          error instanceof Error
+            ? error.message
+            : "출석 정보를 가져오는 중 오류가 발생했습니다.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -81,7 +110,7 @@ export default function Home() {
     // 다음 보상 계산 (3일, 7일, 30일 주기)
     let daysUntilNextReward = 0;
     let progressValue = 0;
-    
+
     if (currentStreak % 30 === 0) {
       // 30일 보상을 받은 직후
       daysUntilNextReward = 3;
@@ -92,16 +121,16 @@ export default function Home() {
       progressValue = 0;
     } else if (currentStreak % 3 === 0) {
       // 3일 보상을 받은 직후
-      daysUntilNextReward = 4; // 다음 7일 보상까지
+      daysUntilNextReward = 4;
       progressValue = 0;
     } else {
       // 가장 가까운 보상 계산
       const daysUntil3 = 3 - (currentStreak % 3);
       const daysUntil7 = 7 - (currentStreak % 7);
       const daysUntil30 = 30 - (currentStreak % 30);
-      
+
       daysUntilNextReward = Math.min(daysUntil3, daysUntil7, daysUntil30);
-      
+
       // 진행률 계산
       if (daysUntilNextReward === daysUntil3) {
         progressValue = ((3 - daysUntilNextReward) / 3) * 100;
@@ -111,7 +140,7 @@ export default function Home() {
         progressValue = ((30 - daysUntilNextReward) / 30) * 100;
       }
     }
-    
+
     setNextReward(daysUntilNextReward);
     setProgress(progressValue);
   };
@@ -126,7 +155,7 @@ export default function Home() {
       });
       return;
     }
-    
+
     if (todayChecked) {
       toast({
         title: "이미 출석했습니다",
@@ -135,50 +164,52 @@ export default function Home() {
       });
       return;
     }
-    
+
     setLoading(true);
-    
+
     try {
-      const { newStreak, newPoints, specialReward, success, message } = await checkAttendance();
-      
+      const { newStreak, newPoints, specialReward, success, message } =
+        await checkAttendance(user);
+
       if (success) {
         // 애니메이션 표시
         setShowAnimation(true);
-        
+
         // 랜덤 메시지 선택
-        const randomMessage = messages[Math.floor(Math.random() * messages.length)];
-        
+        const randomMessage =
+          messages[Math.floor(Math.random() * messages.length)];
+
         // 특별 보상이 있는 경우 메시지 추가
-        const rewardMessage = specialReward 
-          ? `축하합니다! ${specialReward} 포인트 추가 보상을 받았습니다.` 
+        const rewardMessage = specialReward
+          ? `축하합니다! ${specialReward} 포인트 추가 보상을 받았습니다.`
           : randomMessage;
-        
+
         // 폭죽 효과
         confetti({
           particleCount: 100,
           spread: 70,
-          origin: { y: 0.6 }
+          origin: { y: 0.6 },
         });
-        
+
         toast({
           title: "출석체크 완료!",
           description: rewardMessage,
           variant: "success",
         });
-        
+
         // 상태 업데이트
         setStreak(newStreak);
         setPoints(newPoints);
         setTodayChecked(true);
-        
+
         // 다음 보상 계산
         calculateNextReward(newStreak);
-        
+
         // 최장 스트릭 업데이트
         if (newStreak > longestStreak) {
           setLongestStreak(newStreak);
         }
-        
+
         // 3초 후 애니메이션 숨기기
         setTimeout(() => {
           setShowAnimation(false);
@@ -207,10 +238,10 @@ export default function Home() {
       <div className="absolute top-4 right-4">
         <AuthButton />
       </div>
-      
+
       <Card className="w-full max-w-md mx-auto shadow-lg relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-background to-secondary/10 z-0" />
-        
+
         <CardHeader className="relative z-10">
           <CardTitle className="text-2xl font-bold text-center">
             오늘의 출석체크
@@ -219,22 +250,20 @@ export default function Home() {
             매일 출석하고 포인트를 모아보세요!
           </CardDescription>
         </CardHeader>
-        
+
         <CardContent className="space-y-6 relative z-10">
           {/* 스트릭 및 포인트 정보 */}
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-1">
               <Trophy className="h-4 w-4 text-amber-500" />
-              <span className="text-sm font-medium">
-                {streak}일 연속 출석
-              </span>
+              <span className="text-sm font-medium">{streak}일 연속 출석</span>
             </div>
             <div className="flex items-center gap-1">
               <Star className="h-4 w-4 text-amber-500" />
               <span className="text-sm font-medium">{points} 포인트</span>
             </div>
           </div>
-          
+
           {/* 최장 스트릭 */}
           <div className="flex justify-center items-center">
             <Badge variant="outline" className="flex items-center gap-1">
@@ -242,7 +271,7 @@ export default function Home() {
               <span className="text-xs">최장 기록: {longestStreak}일</span>
             </Badge>
           </div>
-          
+
           {/* 다음 보상까지 진행률 */}
           <div className="space-y-2">
             <div className="flex justify-between text-xs">
@@ -251,7 +280,7 @@ export default function Home() {
             </div>
             <Progress value={progress} className="h-2" />
           </div>
-          
+
           {/* 출석체크 버튼 */}
           <div className="flex justify-center py-4 relative">
             <motion.div
@@ -274,12 +303,14 @@ export default function Home() {
                 ) : (
                   <>
                     <Sparkles className="h-8 w-8 mb-1" />
-                    <span className="text-xs">{loading ? "처리 중..." : "출석하기"}</span>
+                    <span className="text-xs">
+                      {loading ? "처리 중..." : "출석하기"}
+                    </span>
                   </>
                 )}
               </Button>
             </motion.div>
-            
+
             {showAnimation && (
               <motion.div
                 initial={{ scale: 0.8, opacity: 0 }}
@@ -293,7 +324,7 @@ export default function Home() {
               </motion.div>
             )}
           </div>
-          
+
           {/* 보상 안내 */}
           <div className="grid grid-cols-3 gap-2 w-full">
             <Card className="bg-muted/50">
