@@ -13,8 +13,15 @@ export default function AuthButton() {
 
   const signOut = async () => {
     setLoading(true);
-    await supabase.auth.signOut();
-    setLoading(false);
+    try {
+      await supabase.auth.signOut();
+      // 성공 시 추가 조치 가능
+    } catch (error) {
+      console.error("로그아웃 중 오류 발생:", error);
+      // 사용자에게 오류 알림 (토스트 메시지 등)
+    } finally {
+      setLoading(false);
+    }
   };
 
   return user ? (
