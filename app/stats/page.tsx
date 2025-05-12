@@ -15,6 +15,65 @@ import Link from "next/link";
 import { getCommitHistory } from "@/lib/commit-service";
 import { Calendar } from "@/components/ui/calendar";
 
+// 최장 스트릭 계산 함수
+const calculateLongestStreak = (dates: Date[]) => {
+  let maxStreak = 0;
+  let current = 0;
+  let lastDate: Date | null = null;
+  // 날짜순 정렬
+  const sortedDates = [...dates].sort((a, b) => a.getTime() - b.getTime());
+  sortedDates.forEach((date) => {
+    if (!lastDate) {
+      current = 1;
+    } else {
+      const diffTime = Math.abs(date.getTime() - lastDate.getTime());
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      if (diffDays === 1) {
+        current++;
+      } else if (diffDays > 1) {
+        current = 1;
+      }
+    }
+    maxStreak = Math.max(maxStreak, current);
+    lastDate = date;
+  });
+  return maxStreak;
+};
+
+// 월별 통계 계산 함수
+const calculateMonthlyStats = (dates: Date[]) => {
+  const monthly: { [key: string]: number } = {};
+  dates.forEach((date) => {
+    const monthYear = `${date.getFullYear()}-${date.getMonth() + 1}`;
+    monthly[monthYear] = (monthly[monthYear] || 0) + 1;
+  });
+  return monthly;
+};
+
+// 현재 스트릭 계산 함수
+const calculateCurrentStreak = (dates: Date[]) => {
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const hasToday = dates.some((d) => d.toDateString() === today.toDateString());
+  const hasYesterday = dates.some(
+    (d) => d.toDateString() === yesterday.toDateString()
+  );
+  if (!hasToday && !hasYesterday) {
+    return 0;
+  }
+  let streak = hasToday ? 1 : 0;
+  const checkDate = hasToday ? yesterday : new Date(yesterday);
+  checkDate.setDate(checkDate.getDate() - 1);
+  while (dates.some((d) => d.toDateString() === checkDate.toDateString())) {
+    streak++;
+    checkDate.setDate(checkDate.getDate() - 1);
+  }
+  return streak;
+};
+
+// ==================================================
+
 export default function StatsPage() {
   const [commitDates, setCommitDates] = useState<Date[]>([]);
   const [longestStreak, setLongestStreak] = useState(0);
@@ -28,67 +87,16 @@ export default function StatsPage() {
       const history = await getCommitHistory();
       const dates = history.map((date) => new Date(date));
       setCommitDates(dates);
-
-      // 월별 통계 계산
-      const monthly: { [key: string]: number } = {};
-      dates.forEach((date) => {
-        const monthYear = `${date.getFullYear()}-${date.getMonth() + 1}`;
-        monthly[monthYear] = (monthly[monthYear] || 0) + 1;
-      });
+      // 월별 통계 계산 및 설정
+      const monthly = calculateMonthlyStats(dates);
       setMonthlyStats(monthly);
-
-      // 최장 스트릭 계산
-      let maxStreak = 0;
-      let current = 0;
-      let lastDate: Date | null = null;
-      // 날짜순 정렬 (원본 배열을 변경하지 않음)
-      const sortedDates = [...dates].sort((a, b) => a.getTime() - b.getTime());
-      sortedDates.forEach((date) => {
-        if (!lastDate) {
-          current = 1;
-        } else {
-          const diffTime = Math.abs(date.getTime() - lastDate.getTime());
-          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-          if (diffDays === 1) {
-            current++;
-          } else if (diffDays > 1) {
-            current = 1;
-          }
-        }
-        maxStreak = Math.max(maxStreak, current);
-        lastDate = date;
-      });
+      // 최장 스트릭 계산 및 설정
+      const maxStreak = calculateLongestStreak(dates);
       setLongestStreak(maxStreak);
-
-      // 현재 스트릭 계산
-      const today = new Date();
-      const yesterday = new Date(today);
-      yesterday.setDate(yesterday.getDate() - 1);
-
-      const hasToday = dates.some(
-        (d) => d.toDateString() === today.toDateString()
-      );
-      const hasYesterday = dates.some(
-        (d) => d.toDateString() === yesterday.toDateString()
-      );
-
-      if (!hasToday && !hasYesterday) {
-        setCurrentStreak(0);
-        return;
-      }
-
-      let streak = hasToday ? 1 : 0;
-      const checkDate = hasToday ? yesterday : new Date(yesterday);
-      checkDate.setDate(checkDate.getDate() - 1);
-
-      while (dates.some((d) => d.toDateString() === checkDate.toDateString())) {
-        streak++;
-        checkDate.setDate(checkDate.getDate() - 1);
-      }
-
-      setCurrentStreak(streak);
+      // 현재 스트릭 계산 및 설정
+      const currentStreakValue = calculateCurrentStreak(dates);
+      setCurrentStreak(currentStreakValue);
     };
-
     loadData();
   }, []);
 
