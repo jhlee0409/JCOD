@@ -1,5 +1,5 @@
 import { createClient } from "@/utils/supabase/client";
-import type { User } from '@supabase/supabase-js';
+import type { User } from "@supabase/supabase-js";
 
 export interface UserStats {
   current_streak: number;
@@ -18,7 +18,9 @@ export interface UserAttendanceData {
 }
 
 // 사용자 데이터와 출석 기록을 한 번에 가져오는 함수
-export async function getUserAttendanceData(user: User | null): Promise<UserAttendanceData> {
+export async function getUserAttendanceData(
+  user: User | null
+): Promise<UserAttendanceData> {
   console.log("getUserAttendanceData called with user:", user?.id);
   const supabase = createClient();
   try {
@@ -39,7 +41,7 @@ export async function getUserAttendanceData(user: User | null): Promise<UserAtte
         .from("user_stats")
         .select("*")
         .eq("user_id", user.id)
-        .single<UserStats>(),
+        .maybeSingle<UserStats>(),
       supabase
         .from("attendances")
         .select("check_date")
@@ -200,7 +202,9 @@ export async function checkAttendance(user: User | null): Promise<{
 }
 
 // 출석 기록 가져오기
-export async function getAttendanceHistory(user: User | null): Promise<string[]> {
+export async function getAttendanceHistory(
+  user: User | null
+): Promise<string[]> {
   const { attendanceHistory, error } = await getUserAttendanceData(user);
   if (error) {
     console.error("출석 기록 조회 오류 (from getUserAttendanceData):", error);
