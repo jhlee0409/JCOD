@@ -55,24 +55,31 @@ export default function Login({ signIn, message }: Props) {
 
         <form
           action={(formData: FormData) => {
-            const email = formData.get("email") as string;
-            const password = formData.get("password") as string;
+            setLoading(true);
+            try {
+              const email = formData.get("email") as string;
+              const password = formData.get("password") as string;
 
-            const emailValidation = validateEmail(email);
-            if (!emailValidation.valid) {
-              return setErrors({
-                email: emailValidation.message,
-              });
+              const emailValidation = validateEmail(email);
+              if (!emailValidation.valid) {
+                return setErrors({
+                  email: emailValidation.message,
+                });
+              }
+
+              const passwordValidation = validatePassword(password);
+              if (!passwordValidation.valid) {
+                return setErrors({
+                  password: passwordValidation.message,
+                });
+              }
+
+              signIn(formData);
+            } catch (error) {
+              console.error("로그인 중 오류 발생:", error);
+            } finally {
+              setLoading(false);
             }
-
-            const passwordValidation = validatePassword(password);
-            if (!passwordValidation.valid) {
-              return setErrors({
-                password: passwordValidation.message,
-              });
-            }
-
-            signIn(formData);
           }}
         >
           <CardContent className=" space-y-4">
