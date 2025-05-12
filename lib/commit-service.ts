@@ -22,6 +22,11 @@ export async function getCommitHistory(): Promise<string[]> {
   return data ? JSON.parse(data) : [];
 }
 
+// 날짜를 YYYY-MM-DD 형식의 문자열로 변환하는 헬퍼 함수
+function formatDateString(date: Date): string {
+  return date.toISOString().split("T")[0];
+}
+
 // 현재 연속 스트릭 계산
 export async function getStreak(): Promise<number> {
   const history = await getCommitHistory();
@@ -36,8 +41,8 @@ export async function getStreak(): Promise<number> {
   yesterday.setDate(yesterday.getDate() - 1);
 
   // 오늘 또는 어제 커밋했는지 확인
-  const todayStr = today.toISOString().split("T")[0];
-  const yesterdayStr = yesterday.toISOString().split("T")[0];
+  const todayStr = formatDateString(today);
+  const yesterdayStr = formatDateString(yesterday);
 
   const lastCommitDate = history[history.length - 1];
 
@@ -56,17 +61,14 @@ export async function getStreak(): Promise<number> {
     // 같은 날짜의 중복 커밋은 건너뛰기
     if (
       i < history.length - 1 &&
-      commitDate.toISOString().split("T")[0] ===
-        new Date(history[i + 1]).toISOString().split("T")[0]
+      formatDateString(commitDate) ===
+        formatDateString(new Date(history[i + 1]))
     ) {
       continue;
     }
 
     // 예상 날짜와 실제 커밋 날짜가 다르면 스트릭 종료
-    if (
-      commitDate.toISOString().split("T")[0] !==
-      expectedDate.toISOString().split("T")[0]
-    ) {
+    if (formatDateString(commitDate) !== formatDateString(expectedDate)) {
       break;
     }
 
