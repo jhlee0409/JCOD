@@ -41,28 +41,23 @@ export default function StatsPage() {
       let maxStreak = 0;
       let current = 0;
       let lastDate: Date | null = null;
-
-      // 날짜순 정렬
-      dates.sort((a, b) => a.getTime() - b.getTime());
-
-      dates.forEach((date) => {
+      // 날짜순 정렬 (원본 배열을 변경하지 않음)
+      const sortedDates = [...dates].sort((a, b) => a.getTime() - b.getTime());
+      sortedDates.forEach((date) => {
         if (!lastDate) {
           current = 1;
         } else {
           const diffTime = Math.abs(date.getTime() - lastDate.getTime());
           const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
           if (diffDays === 1) {
             current++;
           } else if (diffDays > 1) {
             current = 1;
           }
         }
-
         maxStreak = Math.max(maxStreak, current);
         lastDate = date;
       });
-
       setLongestStreak(maxStreak);
 
       // 현재 스트릭 계산
