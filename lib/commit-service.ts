@@ -19,7 +19,14 @@ export async function commitToday(): Promise<void> {
 // 커밋 기록 가져오기
 export async function getCommitHistory(): Promise<string[]> {
   const data = localStorage.getItem(STORAGE_KEY);
-  return data ? JSON.parse(data) : [];
+  if (!data) return [];
+  try {
+    const parsed = JSON.parse(data);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    console.error("커밋 기록 파싱 중 오류 발생:", error);
+    return [];
+  }
 }
 
 // 날짜를 YYYY-MM-DD 형식의 문자열로 변환하는 헬퍼 함수
