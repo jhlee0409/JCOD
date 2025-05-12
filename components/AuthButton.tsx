@@ -1,37 +1,45 @@
-import { createClient } from "@/utils/supabase/server";
-import Link from "next/link";
-import { redirect } from "next/navigation";
+"use client";
 
-export default async function AuthButton() {
+import { createClient } from "@/utils/supabase/client";
+import Link from "next/link";
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { useUser } from "./UserProvider";
+
+export default function AuthButton() {
+  const { user } = useUser();
+  const [loading, setLoading] = useState(false);
   const supabase = createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
   const signOut = async () => {
-    "use server";
-
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    return redirect("/login");
+    setLoading(true);
+    try {
+      await supabase.auth.signOut();
+      // 성공 시 추가 조치 가능
+    } catch (error) {
+      console.error("로그아웃 중 오류 발생:", error);
+      // 사용자에게 오류 알림 (토스트 메시지 등)
+    } finally {
+      setLoading(false);
+    }
   };
 
   return user ? (
     <div className="flex items-center gap-4">
-      Hey, {user.email}!
-      <form action={signOut}>
-        <button className="py-2 px-4 rounded-md no-underline bg-btn-background hover:bg-btn-background-hover">
-          Logout
-        </button>
-      </form>
+      <span className="text-sm">안녕하세요, {user.email}!</span>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={signOut}
+        disabled={loading}
+        className="w-16"
+      >
+        {loading ? "" : "로그아웃"}
+      </Button>
     </div>
   ) : (
-    <Link
-      href="/login"
-      className="py-2 px-3 flex rounded-md no-underline bg-btn-background hover:bg-btn-background-hover"
-    >
-      Login
-    </Link>
+    <Button variant="outline" size="sm" asChild className="w-16">
+      <Link href="/login">로그인</Link>
+    </Button>
   );
 }
