@@ -8,7 +8,7 @@ import { useUser } from "./UserProvider";
 
 export default function AuthButton() {
   const { user } = useUser();
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const supabase = createClient();
 
   const signOut = async () => {
