@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { validateEmail, validatePassword } from "@/utils/validate";
 import { useToast } from "@/hooks/use-toast";
 import {
   Card,
@@ -19,15 +20,12 @@ import { ArrowLeft, LogIn } from "lucide-react";
 
 type Props = {
   signIn: (formData: FormData) => void;
-  signUp: (formData: FormData) => void;
   message?: string;
 };
 
-export default function Login({ signIn, signUp, message }: Props) {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+export default function Login({ signIn, message }: Props) {
   const [loading, setLoading] = useState(false);
-  const router = useRouter();
+  const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const { toast } = useToast();
 
   useEffect(() => {
@@ -55,7 +53,28 @@ export default function Login({ signIn, signUp, message }: Props) {
           </CardDescription>
         </CardHeader>
 
-        <form action={signIn}>
+        <form
+          action={(formData: FormData) => {
+            const email = formData.get("email") as string;
+            const password = formData.get("password") as string;
+
+            const emailValidation = validateEmail(email);
+            if (!emailValidation.valid) {
+              return setErrors({
+                email: emailValidation.message,
+              });
+            }
+
+            const passwordValidation = validatePassword(password);
+            if (!passwordValidation.valid) {
+              return setErrors({
+                password: passwordValidation.message,
+              });
+            }
+
+            signIn(formData);
+          }}
+        >
           <CardContent className=" space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">이메일</Label>
@@ -65,6 +84,9 @@ export default function Login({ signIn, signUp, message }: Props) {
                 placeholder="your@email.com"
                 required
               />
+              {errors.email && (
+                <p className="text-sm text-destructive">{errors.email}</p>
+              )}
             </div>
             <div className="space-y-2">
               <div className="flex items-center justify-between">
@@ -82,6 +104,9 @@ export default function Login({ signIn, signUp, message }: Props) {
                 placeholder="••••••••"
                 required
               />
+              {errors.password && (
+                <p className="text-sm text-destructive">{errors.password}</p>
+              )}
             </div>
           </CardContent>
 

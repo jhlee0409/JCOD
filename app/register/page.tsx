@@ -16,6 +16,11 @@ import { ArrowLeft, UserPlus } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
+import {
+  validateEmail,
+  validateName,
+  validatePassword,
+} from "@/utils/validate";
 
 export default function RegisterPage() {
   const [name, setName] = useState("");
@@ -32,23 +37,21 @@ export default function RegisterPage() {
     setLoading(true);
     setErrors({});
 
-    // 유효성 검사
     const newErrors: { [key: string]: string } = {};
 
-    if (!name.trim()) {
-      newErrors.name = "이름을 입력해주세요";
+    const nameValidation = validateName(name);
+    if (!nameValidation.valid) {
+      newErrors.name = nameValidation.message;
     }
 
-    if (!email.trim()) {
-      newErrors.email = "이메일을 입력해주세요";
-    } else if (!/\S+@\S+\.\S+/.test(email)) {
-      newErrors.email = "올바른 이메일 형식이 아닙니다";
+    const emailValidation = validateEmail(email);
+    if (!emailValidation.valid) {
+      newErrors.email = emailValidation.message;
     }
 
-    if (!password) {
-      newErrors.password = "비밀번호를 입력해주세요";
-    } else if (password.length < 6) {
-      newErrors.password = "비밀번호는 최소 6자 이상이어야 합니다";
+    const passwordValidation = validatePassword(password);
+    if (!passwordValidation.valid) {
+      newErrors.password = passwordValidation.message;
     }
 
     if (password !== confirmPassword) {
