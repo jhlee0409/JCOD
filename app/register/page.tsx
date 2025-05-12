@@ -63,39 +63,33 @@ export default function RegisterPage() {
       setLoading(false);
       return;
     }
-
     try {
-      const formData = new FormData();
-      formData.append("name", name);
-      formData.append("email", email);
-      formData.append("password", password);
-
       const response = await fetch("/api/auth/register", {
         method: "POST",
-        body: formData,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, email, password }),
       });
 
       const result = await response.json();
 
       if (!response.ok) {
-        toast({
-          title: "이메일 전송 실패",
-          description: result.error || "오류가 발생했습니다",
-          variant: "error",
-        });
-      } else {
-        toast({
-          title: "이메일을 확인해 주세요",
-          description:
-            "인증 메일을 보냈어요. 메일함(혹은 스팸함)에서 확인 후 링크를 클릭해 주세요.",
-          variant: "success",
-        });
-        router.push("/login");
+        throw new Error(
+          result.error || "회원가입 처리 중 오류가 발생했습니다."
+        );
       }
-    } catch (error) {
+
       toast({
-        title: "이메일 전송 실패",
-        description: "오류가 발생했습니다. 다시 시도해주세요.",
+        title: "이메일을 확인해 주세요",
+        description:
+          "인증 메일을 보냈어요. 메일함(혹은 스팸함)에서 확인 후 링크를 클릭해 주세요.",
+      });
+      router.push("/login");
+    } catch (error: any) {
+      console.error("회원가입 실패:", error);
+      toast({
+        title: "회원가입 실패",
+        description:
+          error.message || "알 수 없는 오류가 발생했습니다. 다시 시도해주세요.",
         variant: "error",
       });
     } finally {
