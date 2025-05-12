@@ -24,10 +24,10 @@ export default function AuthButton() {
         variant="outline"
         size="sm"
         onClick={signOut}
-        disabled={loading && !user}
+        disabled={loading}
         className="w-16"
       >
-        {loading && !user ? "처리 중..." : "로그아웃"}
+        {loading ? "" : "로그아웃"}
       </Button>
     </div>
   ) : (
