@@ -55,12 +55,10 @@ export async function checkAttendance(): Promise<AttendanceResult> {
     if (newStreak % 3 === 0) {
       pointsToAdd += 10; // 3일마다 추가 10포인트
       specialReward = 10;
-    }
-    if (newStreak % 7 === 0) {
+    } else if (newStreak % 7 === 0) {
       pointsToAdd += 30; // 7일마다 추가 30포인트
       specialReward = 30;
-    }
-    if (newStreak % 30 === 0) {
+    } else if (newStreak % 30 === 0) {
       pointsToAdd += 150; // 30일마다 추가 150포인트
       specialReward = 150;
     }
