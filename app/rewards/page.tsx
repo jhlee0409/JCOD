@@ -19,21 +19,34 @@ import {
   getAvailableRewards,
   purchaseReward,
 } from "@/lib/attendance-service";
+
+import type { Reward } from "@/lib/attendance-service";
 import { useToast } from "@/hooks/use-toast";
 
 export default function RewardsPage() {
   const [points, setPoints] = useState(0);
-  const [rewards, setRewards] = useState<any[]>([]);
+  const [rewards, setRewards] = useState<Reward[]>([]);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
     const loadData = async () => {
-      const { points } = await getRewards();
-      const availableRewards = await getAvailableRewards();
+      setLoading(true);
+      try {
+        const { points } = await getRewards();
+        const availableRewards = await getAvailableRewards();
 
-      setPoints(points);
-      setRewards(availableRewards);
+        setPoints(points);
+        setRewards(availableRewards);
+      } catch (error) {
+        toast({
+          title: "데이터 로딩 실패",
+          description: "보상 정보를 불러오는 중 오류가 발생했습니다.",
+          variant: "error",
+        });
+      } finally {
+        setLoading(false);
+      }
     };
 
     loadData();
