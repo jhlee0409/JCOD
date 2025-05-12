@@ -32,13 +32,21 @@ export default function SharePage() {
 
   useEffect(() => {
     const loadData = async () => {
-      const history = await getCommitHistory();
-      setTotalDays(history.length);
-
-      const currentStreak = await getStreak();
-      setStreak(currentStreak);
+      try {
+        const history = await getCommitHistory();
+        setTotalDays(history.length);
+        const currentStreak = await getStreak();
+        setStreak(currentStreak);
+      } catch (error) {
+        console.error("데이터 로딩 중 오류 발생:", error);
+        toast({
+          title: "데이터 로딩 실패",
+          description:
+            "정보를 불러오는 중 문제가 발생했습니다. 다시 시도해주세요.",
+          variant: "destructive",
+        });
+      }
     };
-
     loadData();
   }, []);
 
